@@ -39,4 +39,3 @@ jobs:
     steps:
     - uses: ./.github/workflows/release.yml
       if: github.ref_type == 'tag'
-      secrets: inherit
