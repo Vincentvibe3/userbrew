@@ -38,6 +38,9 @@ jobs:
         retention-days: 1
 
   release:
+    permissions:
+      contents: write
+      
     needs: build
     uses: $/.github/workflows/release.yml
     if: github.ref_type == 'tag'
