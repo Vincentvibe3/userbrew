@@ -25,11 +25,11 @@ jobs:
       
       - name: Create Hash file
         shell: bash
-        run: touch ./userbrew-${{ env.RELEASE_VERSION }}-sha256
+        run: touch ./userbrew-sha256
         
       - name: Compute Hash and write to file
         shell: bash
-        run: sha256sum ./userbrew > ./userbrew-${{ env.RELEASE_VERSION }}-sha256
+        run: sha256sum ./userbrew > ./userbrew-sha256
         
       - name: Release
         uses: softprops/action-gh-release@v3
@@ -37,7 +37,7 @@ jobs:
         with:
           files: |
             ./userbrew
-            ./userbrew-${{ env.RELEASE_VERSION }}-sha256
+            ./userbrew-sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
