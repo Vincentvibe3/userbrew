@@ -242,7 +242,7 @@ fn main() {
     cfg.mount_options
         .extend([MountOption::RO, MountOption::FSName("userbrew".to_string())]);
     if !args.single_user {
-        cfg.acl = fuser::SessionACL::RootAndOwner;
+        cfg.acl = fuser::SessionACL::All;
         cfg.mount_options.push(MountOption::AutoUnmount);
     }
 
