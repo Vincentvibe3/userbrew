@@ -22,7 +22,7 @@ jobs:
       run: cargo test --verbose
       
     - name: Upload binary
-      uses: actions/upload-artifact@v8
+      uses: actions/upload-artifact@v7
       with:
         name: binary
         path: ./target/release/userbrew
