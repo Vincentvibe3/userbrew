@@ -39,8 +39,5 @@ jobs:
 
   release:
     needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: $/.github/workflows/release.yml
-      if: github.ref_type == 'tag'
+    uses: $/.github/workflows/release.yml
+    if: github.ref_type == 'tag'
