@@ -3,6 +3,8 @@ name: Build
 on:
   push:
     branches: [ "main" ]
+    tags:
+      - 'v*.*.*'
   pull_request:
     branches: [ "main" ]
   workflow_call:
@@ -17,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Build
       run: cargo build --release --verbose
     - name: Run tests
@@ -29,3 +31,12 @@ jobs:
         name: binary
         path: ./target/release/userbrew
         retention-days: 1
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: ./.github/workflows/release.yml
+      if: github.ref_type == 'tag'
+      secrets: inherit
