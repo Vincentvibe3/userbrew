@@ -10,6 +10,11 @@ on:
   workflow_call:
   workflow_dispatch:
 
+concurrency:
+  # only run one build at a time
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -37,5 +42,5 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: ./.github/workflows/release.yml
+    - uses: $/.github/workflows/release.yml
       if: github.ref_type == 'tag'
