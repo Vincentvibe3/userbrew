@@ -8,13 +8,17 @@ jobs:
   release:
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
+
+    permissions:
+      contents: write
+
     steps:
       - uses: actions/checkout@v7
     
       - name: Set env
         run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
         
-      - name: Download jar
+      - name: Download Binary
         uses: actions/download-artifact@v7
         with:
           name: binary
