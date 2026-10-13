@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::ffi::OsStr;
 use std::fs;
 use std::fs::Metadata;
@@ -35,14 +36,14 @@ struct Args {
     #[arg(short, long, default_value_t = "/home/linuxbrew".to_string())]
     mount_point: String,
 
-    /// Prefix for storing the symlinked folder 
-    /// 
+    /// Prefix for storing the symlinked folder
+    ///
     /// .linuxbrew will be linked to [prefix]/USER/[folder name]
     #[arg(short, long, default_value_t = "/home/".to_string())]
     link_prefix: String,
 
     /// name of folder symlinked to .linuxbrew.
-    /// 
+    ///
     /// Sets name in PREFIX/USER/[name]
     #[arg(short, long, default_value_t = ".userbrew".to_string())]
     name: String,
@@ -89,10 +90,17 @@ impl TimeMetadata {
     }
 }
 
-fn get_username(uid: u32) -> String {
+fn get_username(uid: u32) -> Option<String> {
     let users = Users::new_with_refreshed_list();
-    let uid = Uid::from_str(&uid.to_string()).unwrap();
-    users.get_user_by_id(&uid).unwrap().name().to_string()
+    if let Ok(uid) = Uid::from_str(&uid.to_string()) {
+        if let Some(user) = users.get_user_by_id(&uid) {
+            Some(user.name().to_string())
+        } else {
+            None
+        }
+    } else {
+        None
+    }
 }
 
 struct UserBrewFS {
@@ -177,11 +185,15 @@ impl Filesystem for UserBrewFS {
 
     fn readlink(&self, _req: &Request, ino: INodeNo, reply: ReplyData) {
         if u64::from(ino) == SYMLINK_INO {
-            let username = get_username(_req.uid());
-            let path_str = self.userbrew_prefix.join(Path::new(&username)).join(&self.userbrew_name);
-            if let Ok(real_path) = fs::canonicalize(path_str) {
-                if let Ok(path_str) = real_path.into_string() {
-                    reply.data(path_str.as_bytes());
+            if let Some(username) = get_username(_req.uid()) {
+                let non_canonical_path = self
+                    .userbrew_prefix
+                    .join(Path::new(&username))
+                    .join(&self.userbrew_name);
+                if let Ok(real_path) = fs::canonicalize(non_canonical_path) {
+                    if let Ok(path_str) = real_path.into_string() {
+                        reply.data(path_str.as_bytes());
+                    }
                 }
             }
         }
@@ -208,9 +220,15 @@ impl Filesystem for UserBrewFS {
 
         for (i, entry) in entries.into_iter().enumerate().skip(offset as usize) {
             let can_add = if entry.2 == ".linuxbrew" {
-                let username = get_username(_req.uid());
-                let path_str = self.userbrew_prefix.join(Path::new(&username)).join(&self.userbrew_name);
-                path_str.exists()
+                if let Some(username) = get_username(_req.uid()) {
+                    let path_str = self
+                        .userbrew_prefix
+                        .join(Path::new(&username))
+                        .join(&self.userbrew_name);
+                    path_str.exists()
+                } else {
+                    false
+                }
             } else {
                 true
             };
