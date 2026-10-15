@@ -3,6 +3,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::fs::Metadata;
 use std::io::ErrorKind;
+use std::io::Read;
 use std::os::linux::fs::MetadataExt;
 use std::path;
 use std::path::Path;
@@ -157,6 +158,67 @@ impl UserBrewFS {
             blksize: 4096,
         }
     }
+
+    fn get_userbrew_path(&self, mut uid: u32, pid: u32) -> Option<String>{
+        if uid == 0 {
+            let found_real_user = false;
+            let mut is_su = false;
+            // get real user if running via sudo or su
+            let env_path_str = format!("/proc/{}/environ", pid);
+            let env_path = Path::new(&env_path_str);
+            if let Ok(mut env_file) = fs::File::open(env_path) {
+                let mut data = String::new();
+                if let Ok(_) = env_file.read_to_string(&mut data) {
+                    let mut found_needed_vars = 0;
+                    for line in data.split('\0') {
+                        if let Some((k, v)) = line.split_once('=') {
+                            if k == "SUDO_UID" {
+                                uid = u32::from_str(v).unwrap_or(uid);
+                                found_needed_vars += 1;
+                            } else if k == "SUDO_COMMAND" {
+                                is_su = Path::new(v).ends_with("su");
+                                found_needed_vars += 1;
+                            }
+
+                            if found_needed_vars == 2 {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // fallback use loginuid for real user if env could not be used
+            if !found_real_user && !is_su {
+                let loginuid_path_str = format!("/proc/{}/loginuid", pid);
+                let loginuid_path = Path::new(&loginuid_path_str);
+                if let Ok(mut loginuid_file) = fs::File::open(loginuid_path) {
+                    let mut data = String::new();
+                    if let Ok(_) = loginuid_file.read_to_string(&mut data) {
+                        uid = u32::from_str(&data).unwrap_or(uid);
+                    }
+                }
+            }
+
+            // if using sudo su then treat as root login
+            if is_su {
+                uid = 0
+            }
+        }
+
+        if let Some(username) = get_username(uid) {
+            let non_canonical_path = self
+                .userbrew_prefix
+                .join(Path::new(&username))
+                .join(&self.userbrew_name);
+            if let Ok(real_path) = fs::canonicalize(non_canonical_path) {
+                if let Ok(path_str) = real_path.into_string() {
+                    return Some(path_str);
+                }
+            }
+        }
+        return None;
+    }
 }
 
 impl Filesystem for UserBrewFS {
@@ -185,16 +247,8 @@ impl Filesystem for UserBrewFS {
 
     fn readlink(&self, _req: &Request, ino: INodeNo, reply: ReplyData) {
         if u64::from(ino) == SYMLINK_INO {
-            if let Some(username) = get_username(_req.uid()) {
-                let non_canonical_path = self
-                    .userbrew_prefix
-                    .join(Path::new(&username))
-                    .join(&self.userbrew_name);
-                if let Ok(real_path) = fs::canonicalize(non_canonical_path) {
-                    if let Ok(path_str) = real_path.into_string() {
-                        reply.data(path_str.as_bytes());
-                    }
-                }
+            if let Some(path_str) = self.get_userbrew_path(_req.uid(), _req.pid()) {
+                reply.data(path_str.as_bytes());
             }
         }
     }
@@ -220,15 +274,7 @@ impl Filesystem for UserBrewFS {
 
         for (i, entry) in entries.into_iter().enumerate().skip(offset as usize) {
             let can_add = if entry.2 == ".linuxbrew" {
-                if let Some(username) = get_username(_req.uid()) {
-                    let path_str = self
-                        .userbrew_prefix
-                        .join(Path::new(&username))
-                        .join(&self.userbrew_name);
-                    path_str.exists()
-                } else {
-                    false
-                }
+                self.get_userbrew_path(_req.uid(), _req.pid()).is_some()
             } else {
                 true
             };
@@ -277,7 +323,6 @@ fn main() {
         prefix_path.to_owned(),
         linked_dir.to_owned(),
     );
-
     let result = fuser::mount(fs, target_path, &cfg);
 
     if let Err(e) = result {
